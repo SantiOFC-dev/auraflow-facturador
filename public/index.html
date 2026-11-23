@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AuraFlow Facturador CR v4.4 — Ministerio de Hacienda</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">CR 4.4</div>
+        <div>
+          <h1>AuraFlow</h1>
+          <span>Facturador Electrónico</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-btn active" data-view="dashboard">📊 Resumen</button>
+        <button class="nav-btn" data-view="emit">🧾 Emitir Comprobante</button>
+        <button class="nav-btn" data-view="invoices">📑 Comprobantes</button>
+        <button class="nav-btn" data-view="clients">👥 Clientes</button>
+        <button class="nav-btn" data-view="products">📦 Productos CABYS</button>
+        <button class="nav-btn" data-view="config">⚙️ Emisor / ATV / .p12</button>
+      </nav>
+
+      <div class="env-pill" id="sidebarEnv">
+        <span class="dot"></span>
+        <span id="sidebarEnvText">Cargando...</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="viewTitle">Resumen</h2>
+          <p id="viewSubtitle" class="muted">Ministerio de Hacienda Costa Rica — Esquema v4.4</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-primary" onclick="switchView('emit')">+ Nueva Factura</button>
+        </div>
+      </header>
+
+      <div id="toast" class="toast hidden"></div>
+
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="view active">
+        <div class="kpi-grid">
+          <div class="card kpi">
+            <span class="kpi-label">Facturado Neto</span>
+            <strong class="kpi-value" id="kpiBilled">₡0.00</strong>
+          </div>
+          <div class="card kpi">
+            <span class="kpi-label">IVA Recaudado</span>
+            <strong class="kpi-value" id="kpiTax">₡0.00</strong>
+          </div>
+          <div class="card kpi">
+            <span class="kpi-label">Aceptados Hacienda</span>
+            <strong class="kpi-value text-green" id="kpiAccepted">0</strong>
+          </div>
+          <div class="card kpi">
+            <span class="kpi-label">Pendientes / Errores</span>
+            <strong class="kpi-value text-amber" id="kpiPending">0</strong>
+          </div>
+        </div>
+
+        <div class="card status-banner" id="readinessBanner"></div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Últimos Comprobantes</h3>
+            <button class="btn btn-sm" onclick="switchView('invoices')">Ver todos</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Consecutivo</th>
+                  <th>Cliente</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="recentTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- EMITIR COMPROBANTE -->
+      <section id="view-emit" class="view">
+        <form id="emitForm" class="emit-grid">
+          <div class="card">
+            <h3>1. Datos del Comprobante</h3>
+            <div class="form-row">
+              <div class="field">
+                <label>Tipo de Comprobante</label>
+                <select id="docType" onchange="toggleRefFields()">
+                  <option value="01">01 — Factura Electrónica</option>
+                  <option value="04">04 — Tiquete Electrónico</option>
+                  <option value="03">03 — Nota de Crédito</option>
+                  <option value="02">02 — Nota de Débito</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Moneda</label>
+                <select id="currency" onchange="toggleExchangeRate()">
+                  <option value="CRC">CRC (Colones ₡)</option>
+                  <option value="USD">USD (Dólares $)</option>
+                </select>
+              </div>
+              <div class="field" id="exchangeRateWrap" style="display:none;">
+                <label>Tipo de Cambio</label>
+                <input type="number" step="0.01" id="exchangeRate" value="515.00" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="field">
+                <label>Condición de Venta</label>
+                <select id="saleCondition">
+                  <option value="01">01 — Contado</option>
+                  <option value="02">02 — Crédito</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Medio de Pago</label>
+                <select id="paymentMethod">
+                  <option value="01">01 — Efectivo</option>
+                  <option value="02">02 — Tarjeta</option>
+                  <option value="04">04 — Transferencia / SINPE</option>
+                  <option value="03">03 — Cheque</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Plazo Crédito (días)</label>
+                <input type="number" id="creditTerm" value="0" min="0" />
+              </div>
+            </div>
+
+            <div id="refFields" class="ref-box hidden">
+              <h4>Información de Referencia (NC / ND)</h4>
+              <div class="form-row">
+                <div class="field">
+                  <label>Clave Documento Original (50 dígitos)</label>
+                  <input type="text" id="refClave" placeholder="506..." maxlength="50" />
+                </div>
+                <div class="field">
+                  <label>Código Referencia</label>
+                  <select id="refCode">
+                    <option value="01">01 — Anula documento de referencia</option>
+                    <option value="02">02 — Corrige texto documento</option>
+                    <option value="03">03 — Corrige monto</option>
+                    <option value="04">04 — Referencia a otro documento</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label>Razón</label>
+                <input type="text" id="refReason" placeholder="Ej. Anulación por error en monto" />
+              </div>
+            </div>
+
+            <h3 style="margin-top: 20px;">2. Receptor / Cliente</h3>
+            <div class="form-row">
+              <div class="field">
+                <label>Seleccionar Cliente Guardado</label>
+                <select id="clientSelect" onchange="fillClientFromSelect()">
+                  <option value="">-- Ingreso manual / Contado --</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Tipo Identificación</label>
+                <select id="clientIdType">
+                  <option value="01">01 — Cédula Física</option>
+                  <option value="02">02 — Cédula Jurídica</option>
+                  <option value="03">03 — DIMEX</option>
+                  <option value="04">04 — NITE</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label>Nombre / Razón Social</label>
+                <input type="text" id="clientName" required value="Cliente Contado" />
+              </div>
+              <div class="field">
+                <label>Número Cédula</label>
+                <input type="text" id="clientIdNumber" placeholder="Ej. 115000500" />
+              </div>
+              <div class="field">
+                <label>Correo Electrónico</label>
+                <input type="email" id="clientEmail" placeholder="cliente@correo.com" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>3. Líneas de Detalle (CABYS)</h3>
+              <div class="inline-actions">
+                <select id="quickProductSelect">
+                  <option value="">+ Agregar desde catálogo CABYS...</option>
+                </select>
+                <button type="button" class="btn btn-sm" onclick="addProductLine()">Agregar</button>
+                <button type="button" class="btn btn-sm" onclick="addEmptyLine()">+ Línea manual</button>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table class="lines-table">
+                <thead>
+                  <tr>
+                    <th>CABYS (13)</th>
+                    <th>Descripción</th>
+                    <th>Und</th>
+                    <th>Cant.</th>
+                    <th>Precio Unit.</th>
+                    <th>Desc.</th>
+                    <th>IVA %</th>
+                    <th>Total</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="linesBody"></tbody>
+              </table>
+            </div>
+
+            <div class="emit-footer">
+              <div class="field" style="flex:1;">
+                <label>Notas / Observaciones</label>
+                <input type="text" id="invoiceNotes" placeholder="Opcional, aparece en el PDF" />
+              </div>
+              <div class="totals-box">
+                <div><span>Subtotal:</span> <strong id="sumSubtotal">₡0.00</strong></div>
+                <div><span>Descuento:</span> <strong id="sumDiscount">₡0.00</strong></div>
+                <div><span>IVA:</span> <strong id="sumTax">₡0.00</strong></div>
+                <div class="grand"><span>TOTAL:</span> <strong id="sumTotal">₡0.00</strong></div>
+              </div>
+            </div>
+
+            <div class="emit-actions">
+              <label class="checkbox-label">
+                <input type="checkbox" id="sendImmediately" checked />
+                Firmar (.p12) y enviar a Hacienda inmediatamente
+              </label>
+              <button type="submit" class="btn btn-primary btn-lg">Emitir Comprobante</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <!-- COMPROBANTES -->
+      <section id="view-invoices" class="view">
+        <div class="card">
+          <div class="card-header">
+            <h3>Historial de Comprobantes</h3>
+            <button class="btn btn-sm" onclick="loadInvoices()">↻ Actualizar</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Consecutivo / Clave</th>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Total</th>
+                  <th>Estado Hacienda</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="invoicesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLIENTES -->
+      <section id="view-clients" class="view">
+        <div class="two-col">
+          <form class="card" id="clientForm">
+            <h3>Nuevo Cliente</h3>
+            <div class="field"><label>Nombre / Razón Social</label><input id="cName" required /></div>
+            <div class="form-row">
+              <div class="field">
+                <label>Tipo ID</label>
+                <select id="cIdType">
+                  <option value="01">01 — Física</option>
+                  <option value="02">02 — Jurídica</option>
+                  <option value="03">03 — DIMEX</option>
+                  <option value="04">04 — NITE</option>
+                </select>
+              </div>
+              <div class="field"><label>Cédula</label><input id="cIdNumber" required /></div>
+            </div>
+            <div class="field"><label>Correo</label><input type="email" id="cEmail" /></div>
+            <div class="field"><label>Teléfono</label><input id="cPhone" /></div>
+            <div class="field"><label>Dirección</label><input id="cAddress" value="San José, Costa Rica" /></div>
+            <button type="submit" class="btn btn-primary" style="margin-top:10px;">Guardar Cliente</button>
+          </form>
+
+          <div class="card">
+            <h3>Catálogo de Clientes</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Nombre</th><th>Cédula</th><th>Correo</th><th></th></tr></thead>
+                <tbody id="clientsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRODUCTOS CABYS -->
+      <section id="view-products" class="view">
+        <div class="two-col">
+          <form class="card" id="productForm">
+            <h3>Nuevo Producto / Servicio</h3>
+            <div class="form-row">
+              <div class="field"><label>Código Interno</label><input id="pCode" placeholder="SRV-003" /></div>
+              <div class="field"><label>Código CABYS (13 dígitos)</label><input id="pCabys" required placeholder="8314100000000" maxlength="13" /></div>
+            </div>
+            <div class="field"><label>Descripción</label><input id="pName" required /></div>
+            <div class="form-row">
+              <div class="field">
+                <label>Unidad</label>
+                <select id="pUnit">
+                  <option value="Sp">Sp — Servicios Profesionales</option>
+                  <option value="Unid">Unid — Unidad</option>
+                  <option value="Os">Os — Otro Servicio</option>
+                  <option value="h">h — Hora</option>
+                </select>
+              </div>
+              <div class="field"><label>Precio Unitario</label><input type="number" step="0.01" id="pPrice" required /></div>
+              <div class="field">
+                <label>Tarifa IVA</label>
+                <select id="pTax">
+                  <option value="13">13% — Tarifa General</option>
+                  <option value="4">4% — Reducida (Salud/Boletos)</option>
+                  <option value="2">2% — Reducida</option>
+                  <option value="1">1% — Canasta Básica</option>
+                  <option value="0">0% — Exento</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-top:10px;">Guardar Producto</button>
+          </form>
+
+          <div class="card">
+            <h3>Catálogo CABYS</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>CABYS</th><th>Descripción</th><th>Precio</th><th>IVA</th><th></th></tr></thead>
+                <tbody id="productsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONFIGURACIÓN EMISOR -->
+      <section id="view-config" class="view">
+        <div class="two-col">
+          <form class="card" id="emitterForm">
+            <h3>Datos del Emisor & Credenciales ATV</h3>
+            <div class="form-row">
+              <div class="field">
+                <label>Ambiente Hacienda</label>
+                <select id="cfgEnv">
+                  <option value="sandbox">SANDBOX (Pruebas / Staging)</option>
+                  <option value="prod">PRODUCCIÓN</option>
+                </select>
+              </div>
+              <div class="field"><label>Código Actividad (6 dígitos)</label><input id="cfgActivity" required /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Nombre / Razón Social</label><input id="cfgName" required /></div>
+              <div class="field"><label>Nombre Comercial</label><input id="cfgCommName" /></div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label>Tipo ID</label>
+                <select id="cfgIdType">
+                  <option value="01">01 — Cédula Física</option>
+                  <option value="02">02 — Cédula Jurídica</option>
+                  <option value="03">03 — DIMEX</option>
+                  <option value="04">04 — NITE</option>
+                </select>
+              </div>
+              <div class="field"><label>Cédula Emisor</label><input id="cfgIdNumber" required /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Correo</label><input type="email" id="cfgEmail" required /></div>
+              <div class="field"><label>Teléfono</label><input id="cfgPhone" /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Sucursal (3)</label><input id="cfgBranch" maxlength="3" /></div>
+              <div class="field"><label>Terminal (5)</label><input id="cfgTerminal" maxlength="5" /></div>
+              <div class="field"><label>Dirección</label><input id="cfgAddress" /></div>
+            </div>
+
+            <h4 style="margin-top:14px;">Credenciales API ATV (Hacienda)</h4>
+            <div class="form-row">
+              <div class="field">
+                <label>Usuario ATV</label>
+                <input id="cfgAtvUser" placeholder="cpj-3-101-xxxxxx@stag.comprobanteselectronicos.go.cr" />
+              </div>
+              <div class="field">
+                <label>Contraseña API ATV</label>
+                <input type="password" id="cfgAtvPass" placeholder="Dejar igual para no cambiar" />
+              </div>
+            </div>
+
+            <div class="inline-actions" style="margin-top:12px;">
+              <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+              <button type="button" class="btn" onclick="testAtvAuth()">🔌 Probar Conexión IdP Hacienda</button>
+            </div>
+          </form>
+
+          <form class="card" id="p12Form">
+            <h3>Llave Criptográfica (.p12)</h3>
+            <p class="muted" style="margin-bottom:12px;">
+              Sube el archivo <code>.p12</code> generado en el portal ATV / TRIBU-CR junto con su PIN de 4 dígitos para firmar los XML con XAdES-EPES.
+            </p>
+            <div id="p12StatusBox" class="status-banner" style="margin-bottom:14px;"></div>
+            <div class="field">
+              <label>Archivo .p12</label>
+              <input type="file" id="p12File" accept=".p12,.pfx" required />
+            </div>
+            <div class="field">
+              <label>PIN del Certificado</label>
+              <input type="password" id="p12Pin" required placeholder="PIN de 4 dígitos" />
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-top:10px;">Validar y Guardar .p12</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
